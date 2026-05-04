@@ -967,41 +967,6 @@
     <div class="card">
       <div class="card-header">
         <div>
-          <div class="card-title">Detalle por oportunidad</div>
-          <div class="card-subtitle">Buscar por marca, sucursal o responsable. Filtros de mes en barra superior.</div>
-        </div>
-        <div class="subtabs" id="sinfinSortTabs">
-          <button class="subtab active" data-sort="pie_total">Por monto PIE</button>
-          <button class="subtab" data-sort="mfact">Por monto factura</button>
-          <button class="subtab" data-sort="fecha_f">Por fecha</button>
-        </div>
-      </div>
-      <div class="table-controls">
-        <input type="text" class="search-input" id="sinfinSearch" placeholder="Buscar por marca, sucursal o responsable…">
-        <span class="row-count" id="sinfinRowCount"></span>
-      </div>
-      <div class="card-body" style="padding: 0; max-height: 700px; overflow-y: auto;">
-        <table>
-          <thead style="position: sticky; top: 0;">
-            <tr>
-              <th></th>
-              <th>Marca</th>
-              <th>Sucursal</th>
-              <th>Responsable</th>
-              <th class="right">Fecha facturación</th>
-              <th class="right">Monto factura</th>
-              <th class="right">Monto PIE</th>
-              <th class="right">% PIE / Factura</th>
-            </tr>
-          </thead>
-          <tbody id="sinfinTbody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <div>
           <div class="card-title">Evolutivo mensual · cantidad y monto PIE</div>
           <div class="card-subtitle">Cómo crecen mes a mes las oportunidades NUEVOS con PIE pero sin financiamiento.</div>
         </div>
@@ -1060,6 +1025,42 @@
             </tr>
           </thead>
           <tbody id="sinfinRespTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Detalle por oportunidad</div>
+          <div class="card-subtitle">Listado completo de las 140 oportunidades. Buscar por marca, sucursal, responsable o referencia. Filtros de mes en la barra superior.</div>
+        </div>
+        <div class="subtabs" id="sinfinSortTabs">
+          <button class="subtab active" data-sort="pie_total">Por monto PIE</button>
+          <button class="subtab" data-sort="mfact">Por monto factura</button>
+          <button class="subtab" data-sort="fecha_f">Por fecha</button>
+        </div>
+      </div>
+      <div class="table-controls">
+        <input type="text" class="search-input" id="sinfinSearch" placeholder="Buscar por marca, sucursal, responsable o referencia…">
+        <span class="row-count" id="sinfinRowCount"></span>
+      </div>
+      <div class="card-body" style="padding: 0; max-height: 700px; overflow-y: auto;">
+        <table>
+          <thead style="position: sticky; top: 0;">
+            <tr>
+              <th></th>
+              <th>Marca</th>
+              <th>Sucursal</th>
+              <th>Responsable</th>
+              <th class="right">Fecha facturación</th>
+              <th class="right">Monto factura</th>
+              <th class="right">Monto PIE</th>
+              <th class="right">% PIE / Factura</th>
+              <th>Referencia</th>
+            </tr>
+          </thead>
+          <tbody id="sinfinTbody"></tbody>
         </table>
       </div>
     </div>
@@ -1772,13 +1773,16 @@ function renderSinFin() {
   if (q) list = list.filter(d => (
     (d.marca || '').toLowerCase().includes(q) ||
     (d.sucursal || '').toLowerCase().includes(q) ||
-    (d.responsable || '').toLowerCase().includes(q)
+    (d.responsable || '').toLowerCase().includes(q) ||
+    (d.id || '').toLowerCase().includes(q)
   ));
   if (sortBy === 'fecha_f') list.sort((a, b) => (a.fecha_f || '').localeCompare(b.fecha_f || ''));
   else list.sort((a, b) => (b[sortBy] || 0) - (a[sortBy] || 0));
   document.getElementById('sinfinRowCount').textContent = `${list.length} de ${SIN_FIN.length} oportunidades`;
   tbody.innerHTML = list.map((d, i) => {
     const ratio = d.mfact > 0 ? (d.pie_total / d.mfact * 100) : 0;
+    const refId = d.id || '';
+    const refShort = refId ? refId.split('-')[0] : '—';
     return `<tr>
       <td class="rank">${(i+1).toString().padStart(2,'0')}</td>
       <td><strong>${d.marca || '—'}</strong></td>
@@ -1788,6 +1792,7 @@ function renderSinFin() {
       <td class="right mono">${fmtMoney(d.mfact || 0)}</td>
       <td class="right mono"><strong>${fmtMoney(d.pie_total || 0)}</strong></td>
       <td class="right mono">${ratio.toFixed(2).replace('.', ',')}%</td>
+      <td class="mono" style="font-size: 11px; color: var(--text-soft);" title="${refId}">${refShort}</td>
     </tr>`;
   }).join('');
 
