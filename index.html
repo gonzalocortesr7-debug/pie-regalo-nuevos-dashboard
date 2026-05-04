@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #F5F6F8;
@@ -1044,6 +1045,7 @@
       <div class="table-controls">
         <input type="text" class="search-input" id="sinfinSearch" placeholder="Buscar por marca, sucursal, responsable o referencia…">
         <span class="row-count" id="sinfinRowCount"></span>
+        <button type="button" id="sinfinExportBtn" class="chip" style="margin-left: auto; cursor: pointer; background: var(--accent); color: white; font-weight: 600;">Descargar Excel</button>
       </div>
       <div class="card-body" style="padding: 0; max-height: 700px; overflow-y: auto;">
         <table>
@@ -1965,6 +1967,69 @@ renderSinFin();
 // Re-render also on month filter change (hook into chip click)
 document.querySelectorAll('.chip[data-month]').forEach(c => c.addEventListener('click', () => renderSinFin()));
 document.getElementById('resetFilters').addEventListener('click', () => renderSinFin());
+
+// Export current filtered detalle to Excel
+function exportSinFinExcel() {
+  if (typeof XLSX === 'undefined') {
+    alert('La librería de exportación no se cargó. Revisa tu conexión.');
+    return;
+  }
+  const monthIdx = activeMonth === 'all' ? null : parseInt(activeMonth);
+  const q = (document.getElementById('sinfinSearch')?.value || '').toLowerCase().trim();
+  const sortBy = window.sinfinSort || 'pie_total';
+  let list = SIN_FIN.slice();
+  if (monthIdx !== null) list = list.filter(d => d.mes_idx === monthIdx);
+  if (q) list = list.filter(d => (
+    (d.marca || '').toLowerCase().includes(q) ||
+    (d.sucursal || '').toLowerCase().includes(q) ||
+    (d.responsable || '').toLowerCase().includes(q) ||
+    (d.id || '').toLowerCase().includes(q)
+  ));
+  if (sortBy === 'fecha_f') list.sort((a, b) => (a.fecha_f || '').localeCompare(b.fecha_f || ''));
+  else list.sort((a, b) => (b[sortBy] || 0) - (a[sortBy] || 0));
+
+  const rows = list.map((d, i) => {
+    const ratio = d.mfact > 0 ? (d.pie_total / d.mfact * 100) : 0;
+    return {
+      '#': i + 1,
+      'Marca': d.marca || '',
+      'Sucursal': d.sucursal || '',
+      'Responsable': (d.responsable || '').trim(),
+      'Fecha facturación': d.fecha_f || '',
+      'Monto factura': d.mfact || 0,
+      'Monto PIE': d.pie_total || 0,
+      'Pagos PIE': d.pie_count || 0,
+      '% PIE / Factura': ratio / 100,
+      'Referencia (Oportunidad.Id)': d.id || ''
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 5 }, { wch: 14 }, { wch: 32 }, { wch: 32 }, { wch: 18 },
+    { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 38 }
+  ];
+  const headerLen = Object.keys(rows[0] || {'a':1}).length;
+  for (let r = 1; r <= rows.length; r++) {
+    const fact = XLSX.utils.encode_cell({ c: 5, r });
+    const pie = XLSX.utils.encode_cell({ c: 6, r });
+    const pct = XLSX.utils.encode_cell({ c: 8, r });
+    if (ws[fact]) ws[fact].z = '"$"#,##0';
+    if (ws[pie]) ws[pie].z = '"$"#,##0';
+    if (ws[pct]) ws[pct].z = '0.00%';
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'PIE sin Financiamiento');
+
+  const ts = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const stamp = `${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}`;
+  const monthSuffix = monthIdx === null ? '' : '_' + DATA.mensual[monthIdx].mes;
+  XLSX.writeFile(wb, `PIE_sin_Financiamiento${monthSuffix}_${stamp}.xlsx`);
+}
+const sinfinExportBtn = document.getElementById('sinfinExportBtn');
+if (sinfinExportBtn) sinfinExportBtn.addEventListener('click', exportSinFinExcel);
 
 // ============ SEGMENT SWITCHER ============
 function applySegmentLabels() {
