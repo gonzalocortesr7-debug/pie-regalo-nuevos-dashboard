@@ -1051,7 +1051,8 @@
       <div class="table-controls">
         <input type="text" class="search-input" id="sinfinSearch" placeholder="Buscar por marca, sucursal, responsable o referencia…">
         <span class="row-count" id="sinfinRowCount"></span>
-        <button type="button" id="sinfinExportBtn" class="chip" style="margin-left: auto; cursor: pointer; background: var(--accent); color: white; font-weight: 600;">Descargar Excel</button>
+        <a href="base_original.xlsx" download class="chip" style="margin-left: auto; cursor: pointer; background: var(--card); color: var(--text); font-weight: 500; text-decoration: none; border: 1px solid var(--border-strong);" title="Descarga el Excel original (BGRegistroDePagos · 41.046 filas)">Descargar base original</a>
+        <button type="button" id="sinfinExportBtn" class="chip" style="cursor: pointer; background: var(--accent); color: white; font-weight: 600;">Descargar Excel</button>
       </div>
       <div class="card-body" style="padding: 0; max-height: 700px; overflow-y: auto;">
         <table>
@@ -1065,7 +1066,7 @@
               <th class="right">Monto factura</th>
               <th class="right">Monto PIE</th>
               <th class="right">% PIE / Factura</th>
-              <th>Referencia</th>
+              <th>ID Oportunidad</th>
             </tr>
           </thead>
           <tbody id="sinfinTbody"></tbody>
@@ -1791,8 +1792,11 @@ function renderSinFin() {
   document.getElementById('sinfinRowCount').textContent = `${list.length} de ${SIN_FIN.length} oportunidades`;
   tbody.innerHTML = list.map((d, i) => {
     const ratio = d.mfact > 0 ? (d.pie_total / d.mfact * 100) : 0;
-    const refId = d.id || '';
-    const refShort = refId ? refId.split('-')[0] : '—';
+    const oid = d.id || '';
+    const link = oid ? `https://americar.creatio.com/0/Shell/#CardModuleV2/OpportunityPageV2/edit/${oid}` : '';
+    const idCell = oid
+      ? `<a href="${link}" target="_blank" rel="noopener" class="mono" style="font-size: 11px; color: var(--accent); text-decoration: none;" title="Abrir en Creatio · ${oid}">${oid}</a>`
+      : '<span style="color: var(--text-mute);">—</span>';
     return `<tr>
       <td class="rank">${(i+1).toString().padStart(2,'0')}</td>
       <td><strong>${d.marca || '—'}</strong></td>
@@ -1802,7 +1806,7 @@ function renderSinFin() {
       <td class="right mono">${fmtMoney(d.mfact || 0)}</td>
       <td class="right mono"><strong>${fmtMoney(d.pie_total || 0)}</strong></td>
       <td class="right mono">${ratio.toFixed(2).replace('.', ',')}%</td>
-      <td class="mono" style="font-size: 11px; color: var(--text-soft);" title="${refId}">${refShort}</td>
+      <td>${idCell}</td>
     </tr>`;
   }).join('');
 
@@ -2007,6 +2011,7 @@ function exportSinFinExcel() {
 
   const rows = list.map((d, i) => {
     const ratio = d.mfact > 0 ? (d.pie_total / d.mfact * 100) : 0;
+    const oid = d.id || '';
     return {
       '#': i + 1,
       'Marca': d.marca || '',
@@ -2017,15 +2022,22 @@ function exportSinFinExcel() {
       'Monto PIE': d.pie_total || 0,
       'Pagos PIE': d.pie_count || 0,
       '% PIE / Factura': ratio / 100,
-      'Referencia (Oportunidad.Id)': d.id || ''
+      'ID Oportunidad': oid,
+      'Link Creatio': oid ? `https://americar.creatio.com/0/Shell/#CardModuleV2/OpportunityPageV2/edit/${oid}` : ''
     };
   });
 
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = [
     { wch: 5 }, { wch: 14 }, { wch: 32 }, { wch: 32 }, { wch: 18 },
-    { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 38 }
+    { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 38 }, { wch: 95 }
   ];
+  for (let r = 1; r <= rows.length; r++) {
+    const linkCell = XLSX.utils.encode_cell({ c: 10, r });
+    if (ws[linkCell] && ws[linkCell].v) {
+      ws[linkCell].l = { Target: ws[linkCell].v, Tooltip: 'Abrir oportunidad en Creatio' };
+    }
+  }
   const headerLen = Object.keys(rows[0] || {'a':1}).length;
   for (let r = 1; r <= rows.length; r++) {
     const fact = XLSX.utils.encode_cell({ c: 5, r });
