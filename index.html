@@ -1002,15 +1002,23 @@
     <div class="card">
       <div class="card-header">
         <div>
-          <div class="card-title">Resumen por marca · sucursal · mes</div>
+          <div class="card-title">Evolutivo mensual · cantidad y monto PIE</div>
+          <div class="card-subtitle">Cómo crecen mes a mes las oportunidades NUEVOS con PIE pero sin financiamiento.</div>
         </div>
       </div>
       <div class="card-body">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
-          <div>
-            <div style="font-weight: 600; margin-bottom: 8px;">Por mes</div>
-            <table><thead><tr><th>Mes</th><th class="right">Ops</th><th class="right">Monto PIE</th></tr></thead><tbody id="sinfinByMes"></tbody></table>
-          </div>
+        <div class="chart-wrap"><canvas id="chartSinFinEvol"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Resumen por marca y sucursal</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
           <div>
             <div style="font-weight: 600; margin-bottom: 8px;">Top 10 marcas</div>
             <table><thead><tr><th>Marca</th><th class="right">Ops</th><th class="right">Monto PIE</th></tr></thead><tbody id="sinfinByMarca"></tbody></table>
@@ -1020,6 +1028,39 @@
             <table><thead><tr><th>Sucursal</th><th class="right">Ops</th><th class="right">Monto PIE</th></tr></thead><tbody id="sinfinBySuc"></tbody></table>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Ranking por vendedor · PIE sin Financiamiento</div>
+          <div class="card-subtitle">Vendedores responsables de oportunidades NUEVOS donde se entregó Regalo PIE sin que el cliente tomara financiamiento. Ordena por cantidad o monto.</div>
+        </div>
+        <div class="subtabs" id="sinfinRespSortTabs">
+          <button class="subtab active" data-sort="pie">Por monto PIE</button>
+          <button class="subtab" data-sort="ops">Por cantidad</button>
+        </div>
+      </div>
+      <div class="table-controls">
+        <input type="text" class="search-input" id="sinfinRespSearch" placeholder="Buscar vendedor…">
+        <span class="row-count" id="sinfinRespRowCount"></span>
+      </div>
+      <div class="card-body" style="padding: 0; max-height: 600px; overflow-y: auto;">
+        <table>
+          <thead style="position: sticky; top: 0;">
+            <tr>
+              <th></th>
+              <th>Vendedor</th>
+              <th class="bar-cell">Distribución</th>
+              <th class="right">Ops</th>
+              <th class="right">Monto PIE</th>
+              <th class="right">PIE prom.</th>
+              <th class="right">Marcas / Sucursales</th>
+            </tr>
+          </thead>
+          <tbody id="sinfinRespTbody"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -1750,14 +1791,83 @@ function renderSinFin() {
     </tr>`;
   }).join('');
 
-  // Resúmenes
+  // Evolutivo mensual: chart de líneas (cantidad + monto)
   const byMes = ['Enero','Febrero','Marzo','Abril'].map((m,i) => {
     const sub = SIN_FIN.filter(d => d.mes_idx === i);
     return { name: m, ops: sub.length, pie: sub.reduce((s,d)=>s+(d.pie_total||0),0) };
   });
-  document.getElementById('sinfinByMes').innerHTML = byMes.map(r =>
-    `<tr><td>${r.name}</td><td class="right mono">${fmtNum(r.ops)}</td><td class="right mono">${fmtMoney(r.pie)}</td></tr>`
-  ).join('');
+  const sfCanvas = document.getElementById('chartSinFinEvol');
+  if (sfCanvas) {
+    if (window.charts.sinFinEvol) window.charts.sinFinEvol.destroy();
+    window.charts.sinFinEvol = new Chart(sfCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: byMes.map(r => r.name),
+        datasets: [
+          {
+            label: 'Cantidad de oportunidades',
+            data: byMes.map(r => r.ops),
+            borderColor: COLORS.accent,
+            backgroundColor: COLORS.accent,
+            borderWidth: 2.5,
+            tension: 0.3,
+            yAxisID: 'y',
+            pointRadius: 5,
+            pointBackgroundColor: COLORS.accent,
+            datalabels: {
+              display: true, anchor: 'end', align: 'top', offset: 8,
+              color: 'white', backgroundColor: COLORS.accent,
+              borderRadius: 3, padding: { top: 2, bottom: 2, left: 5, right: 5 },
+              font: { size: 10, weight: 700 },
+              formatter: (v) => fmtNum(v)
+            }
+          },
+          {
+            label: 'Monto PIE',
+            data: byMes.map(r => r.pie),
+            borderColor: COLORS.gold,
+            backgroundColor: COLORS.gold,
+            borderWidth: 2.5,
+            borderDash: [6, 4],
+            tension: 0.3,
+            yAxisID: 'y1',
+            pointRadius: 5,
+            pointBackgroundColor: COLORS.gold,
+            datalabels: {
+              display: true, anchor: 'end', align: 'bottom', offset: 8,
+              color: 'white', backgroundColor: COLORS.gold,
+              borderRadius: 3, padding: { top: 2, bottom: 2, left: 5, right: 5 },
+              font: { size: 10, weight: 700 },
+              formatter: (v) => fmtMoney(v)
+            }
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 24, bottom: 8 } },
+        scales: {
+          y: { position: 'left', beginAtZero: true,
+               title: { display: true, text: 'Cantidad' },
+               ticks: { callback: v => fmtNum(v) } },
+          y1: { position: 'right', beginAtZero: true,
+                title: { display: true, text: 'Monto PIE' },
+                grid: { display: false },
+                ticks: { callback: v => fmtMoney(v) } }
+        },
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ctx.dataset.yAxisID === 'y1'
+                ? `${ctx.dataset.label}: ${fmtMoneyFull(ctx.raw)}`
+                : `${ctx.dataset.label}: ${fmtNum(ctx.raw)}`
+            }
+          }
+        }
+      }
+    });
+  }
 
   function topBy(field) {
     const m = {};
@@ -1775,6 +1885,54 @@ function renderSinFin() {
   document.getElementById('sinfinBySuc').innerHTML = topBy('sucursal').map(r =>
     `<tr><td>${r.name}</td><td class="right mono">${fmtNum(r.ops)}</td><td class="right mono">${fmtMoney(r.pie)}</td></tr>`
   ).join('');
+
+  // Ranking por vendedor (responsable)
+  const respMap = {};
+  SIN_FIN.forEach(d => {
+    const k = (d.responsable || '(sin)').trim();
+    if (!respMap[k]) respMap[k] = { ops: 0, pie: 0, marcas: new Set(), sucursales: new Set() };
+    respMap[k].ops += 1;
+    respMap[k].pie += d.pie_total || 0;
+    if (d.marca) respMap[k].marcas.add(d.marca);
+    if (d.sucursal) respMap[k].sucursales.add(d.sucursal);
+  });
+  const respList = Object.entries(respMap).map(([k, v]) => ({
+    name: k, ops: v.ops, pie: v.pie,
+    marcas: [...v.marcas], sucursales: [...v.sucursales]
+  }));
+  const respSortBy = window.sinfinRespSort || 'pie';
+  const respSearch = (document.getElementById('sinfinRespSearch')?.value || '').toLowerCase().trim();
+  let respFiltered = respList.filter(r => !respSearch || r.name.toLowerCase().includes(respSearch));
+  respFiltered.sort((a, b) => respSortBy === 'ops'
+    ? (b.ops - a.ops || b.pie - a.pie)
+    : (b.pie - a.pie || b.ops - a.ops));
+  const respMax = respFiltered.length ? Math.max(...respFiltered.map(r => r[respSortBy])) : 0;
+  document.getElementById('sinfinRespRowCount').textContent =
+    `${respFiltered.length} de ${respList.length} vendedores`;
+  document.getElementById('sinfinRespTbody').innerHTML = respFiltered.map((r, i) => {
+    const w = respMax > 0 ? (r[respSortBy] / respMax * 100).toFixed(1) : 0;
+    const rankCls = i < 3 ? `rank-${i+1}` : '';
+    const avg = r.ops > 0 ? Math.round(r.pie / r.ops) : 0;
+    const meta = respSortBy === 'ops'
+      ? `${fmtNum(r.ops)} ops · ${fmtMoney(r.pie)}`
+      : `${fmtMoney(r.pie)} en ${fmtNum(r.ops)} ops`;
+    const marcasTxt = r.marcas.length > 2 ? r.marcas.slice(0, 2).join(', ') + ` (+${r.marcas.length - 2})` : r.marcas.join(', ');
+    const sucsTxt = r.sucursales.length > 2 ? r.sucursales.slice(0, 2).join(', ') + ` (+${r.sucursales.length - 2})` : r.sucursales.join(', ');
+    return `<tr>
+      <td class="rank ${rankCls}">${(i+1).toString().padStart(2,'0')}</td>
+      <td><strong>${r.name}</strong></td>
+      <td class="bar-cell">
+        <div class="bar-cell-inner">
+          <div class="bar-track"><div class="bar-fill" style="width: ${w}%"></div></div>
+          <div class="bar-cell-meta">${meta}</div>
+        </div>
+      </td>
+      <td class="right mono">${fmtNum(r.ops)}</td>
+      <td class="right mono"><strong>${fmtMoney(r.pie)}</strong></td>
+      <td class="right mono">${fmtMoney(avg)}</td>
+      <td class="right mono" style="color: var(--text-soft); font-size: 11px;">${marcasTxt}<br>${sucsTxt}</td>
+    </tr>`;
+  }).join('');
 }
 
 document.querySelectorAll('#sinfinSortTabs .subtab').forEach(t => {
@@ -1785,8 +1943,18 @@ document.querySelectorAll('#sinfinSortTabs .subtab').forEach(t => {
     renderSinFin();
   });
 });
+document.querySelectorAll('#sinfinRespSortTabs .subtab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('#sinfinRespSortTabs .subtab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    window.sinfinRespSort = t.dataset.sort;
+    renderSinFin();
+  });
+});
 const sinfinSearchEl = document.getElementById('sinfinSearch');
 if (sinfinSearchEl) sinfinSearchEl.addEventListener('input', renderSinFin);
+const sinfinRespSearchEl = document.getElementById('sinfinRespSearch');
+if (sinfinRespSearchEl) sinfinRespSearchEl.addEventListener('input', renderSinFin);
 renderSinFin();
 
 // Re-render also on month filter change (hook into chip click)
