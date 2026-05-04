@@ -639,7 +639,7 @@
         <div class="kpi-sub">sobre facturación del segmento</div>
       </div>
       <div class="kpi">
-        <div class="kpi-label">Mejor mes (penetración)</div>
+        <div class="kpi-label" id="k-best-label">Mejor mes (penetración)</div>
         <div class="kpi-value" id="k-best">Abril</div>
         <div class="kpi-sub" id="k-best-sub">22,87% · 512 ops</div>
       </div>
@@ -1994,6 +1994,36 @@ function applySegmentLabels() {
   if (marcaSub) marcaSub.innerHTML = `${DATA.marcas.length} marcas con muestra ≥ 10 oportunidades. Ordena por monto, % penetración o % PIE/Factura. <strong>En rojo</strong> aparecen las marcas sobre la mediana del orden activo.`;
   const sucSub = document.querySelector('.view[data-view="sucursal"] .card-subtitle');
   if (sucSub) sucSub.innerHTML = `${DATA.sucursales.length} sucursales con muestra ≥ 10 oportunidades. <strong>En rojo</strong> aparecen las sucursales sobre la mediana del orden activo.`;
+
+  // KPI "Mejor / Peor mes" — depende del segmento.
+  // En NUEVOS: penetración alta = adopción positiva → MEJOR mes = mayor penetración.
+  // En Pie + Financiamiento: penetración alta de PIE en clientes que ya financian =
+  //   más bonificación entregada al canal financiado, vista como leakage → PEOR mes = mayor penetración.
+  const labelEl = document.getElementById('k-best-label');
+  const valEl = document.getElementById('k-best');
+  const subEl = document.getElementById('k-best-sub');
+  if (labelEl && valEl && subEl) {
+    const sortedMes = [...DATA.mensual].sort((a, b) => b.pctPenetracion - a.pctPenetracion);
+    if (currentSegment === 'pieFin') {
+      labelEl.textContent = 'Peor mes (penetración)';
+      const peor = sortedMes[0];
+      valEl.textContent = peor.mes;
+      subEl.textContent = `${peor.pctPenetracion.toFixed(2).replace('.', ',')}% · ${fmtNum(peor.oppsConPie)} ops`;
+    } else {
+      labelEl.textContent = 'Mejor mes (penetración)';
+      const mejor = sortedMes[0];
+      valEl.textContent = mejor.mes;
+      subEl.textContent = `${mejor.pctPenetracion.toFixed(2).replace('.', ',')}% · ${fmtNum(mejor.oppsConPie)} ops`;
+    }
+  }
+
+  // Concentración cierre KPI: se recalcula desde tercioMonthly del segmento activo
+  const kCierre = document.getElementById('k-cierre');
+  if (kCierre && DATA.tercioMonthly && DATA.tercioMonthly.all) {
+    const t = DATA.tercioMonthly.all;
+    const pct = t.total_trans ? Math.round(t.cierre.trans * 100 / t.total_trans) : 0;
+    kCierre.textContent = pct + '%';
+  }
 }
 
 function rerenderAll() {
