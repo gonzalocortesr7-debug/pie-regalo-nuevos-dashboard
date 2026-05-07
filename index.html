@@ -773,6 +773,7 @@
           <button class="subtab active" data-sort="montoPie">Por monto PIE</button>
           <button class="subtab" data-sort="pctPenetracion">Por % penetración</button>
           <button class="subtab" data-sort="pctPieFactura">Por % PIE / Factura</button>
+          <button class="subtab" data-sort="marginGap">Por brecha de margen</button>
         </div>
       </div>
       <div class="warning-banner" id="marcaWarning">
@@ -793,6 +794,7 @@
               <th class="right">Margen 1 prom. (con PIE)</th>
               <th class="right">Margen 1 % prom. (con PIE)</th>
               <th class="right">Margen 1 % prom. (sin PIE)</th>
+              <th class="right">Brecha sin − con (pp)</th>
             </tr>
           </thead>
           <tbody id="marcaTbody"></tbody>
@@ -829,6 +831,7 @@
           <button class="subtab active" data-sort="montoPie">Por monto PIE</button>
           <button class="subtab" data-sort="pctPenetracion">Por % penetración</button>
           <button class="subtab" data-sort="pctPieFactura">Por % PIE / Factura</button>
+          <button class="subtab" data-sort="marginGap">Por brecha de margen</button>
         </div>
       </div>
       <div class="table-controls">
@@ -853,6 +856,7 @@
               <th class="right">Margen 1 prom. (con PIE)</th>
               <th class="right">Margen 1 % prom. (con PIE)</th>
               <th class="right">Margen 1 % prom. (sin PIE)</th>
+              <th class="right">Brecha sin − con (pp)</th>
             </tr>
           </thead>
           <tbody id="sucTbody"></tbody>
@@ -876,6 +880,7 @@
           <button class="subtab active" data-sort="montoPie">Por monto PIE</button>
           <button class="subtab" data-sort="pctPenetracion">Por % penetración</button>
           <button class="subtab" data-sort="pctPieFactura">Por % PIE / Factura</button>
+          <button class="subtab" data-sort="marginGap">Por brecha de margen</button>
         </div>
       </div>
       <div class="table-controls">
@@ -900,6 +905,7 @@
               <th class="right">Margen 1 prom. (con PIE)</th>
               <th class="right">Margen 1 % prom. (con PIE)</th>
               <th class="right">Margen 1 % prom. (sin PIE)</th>
+              <th class="right">Brecha sin − con (pp)</th>
             </tr>
           </thead>
           <tbody id="respTbody"></tbody>
@@ -1729,6 +1735,12 @@ function projectEntity(entity, monthIdx) {
     margen1Avg:       entity.margen ? (monthIdx === null ? entity.margen.total.avg       : entity.margen.months[monthIdx].avg)       : null,
     margen1PctAvg:    entity.margen ? (monthIdx === null ? entity.margen.total.pctAvg    : entity.margen.months[monthIdx].pctAvg)    : null,
     margen1PctAvgSin: entity.margen ? (monthIdx === null ? entity.margen.total.pctAvgSin : entity.margen.months[monthIdx].pctAvgSin) : null,
+    get marginGap() {
+      // Sin − Con (pp). Positive = con PIE has lower margin (the typical concern).
+      // Require at least 1 opp con PIE so the gap is meaningful.
+      if (!this.oppsConPie || this.margen1PctAvg == null || this.margen1PctAvgSin == null) return -Infinity;
+      return this.margen1PctAvgSin - this.margen1PctAvg;
+    },
     _totalOpps: entity.total.oppsTotal,
   };
 }
@@ -1740,6 +1752,7 @@ function getBenchmark(metric) {
   if (metric === 'pctPenetracion') return ref.pctPenetracion;
   if (metric === 'pctPieFactura') return ref.pctPieFacturaConPie;
   if (metric === 'montoPie') return ref.montoPie;
+  if (metric === 'marginGap') return (ref.margen1PctAvgSin ?? 0) - (ref.margen1PctAvgPie ?? 0);
   return null;
 }
 
@@ -1754,11 +1767,12 @@ function computeMedian(values) {
 }
 
 // Sort criteria where higher = worse. Above-median entries are flagged red.
-const PROBLEM_METRICS = ['montoPie', 'pctPenetracion', 'pctPieFactura'];
+const PROBLEM_METRICS = ['montoPie', 'pctPenetracion', 'pctPieFactura', 'marginGap'];
 
 // Format a metric value for display in the warning banner
 function formatMetricValue(metric, value) {
   if (metric === 'montoPie') return fmtMoney(value);
+  if (metric === 'marginGap') return (value >= 0 ? '+' : '') + value.toFixed(2).replace('.', ',') + ' pp';
   return value.toFixed(2).replace('.', ',') + '%';
 }
 
@@ -1766,6 +1780,7 @@ function metricLabel(metric) {
   if (metric === 'montoPie') return 'Monto PIE';
   if (metric === 'pctPenetracion') return '% Penetración';
   if (metric === 'pctPieFactura') return '% PIE / Factura';
+  if (metric === 'marginGap') return 'Brecha sin − con';
   return metric;
 }
 
@@ -1784,6 +1799,10 @@ function renderRankingTable(tbodyId, entities, sortBy = 'montoPie', searchTerm =
   // For % PIE/Factura sort, only show entities that have PIE (otherwise meaningless)
   if (sortBy === 'pctPieFactura') {
     projected = projected.filter(d => d.oppsConPie > 0);
+  }
+  // For marginGap sort, only entities with both Con PIE and Sin PIE data
+  if (sortBy === 'marginGap') {
+    projected = projected.filter(d => Number.isFinite(d.marginGap));
   }
 
   if (searchTerm) {
@@ -1841,6 +1860,10 @@ function renderRankingTable(tbodyId, entities, sortBy = 'montoPie', searchTerm =
       ? `${d.pctPenetracion.toFixed(1).replace('.', ',')}% de ${fmtNum(d.oppsTotal)} ops`
       : sortBy === 'pctPieFactura'
       ? `${d.pctPieFactura.toFixed(2).replace('.', ',')}% del valor factura`
+      : sortBy === 'marginGap'
+      ? (Number.isFinite(d.marginGap)
+          ? `con PIE ${d.margen1PctAvg.toFixed(2).replace('.', ',')}% vs sin PIE ${d.margen1PctAvgSin.toFixed(2).replace('.', ',')}%`
+          : '— sin datos')
       : `${fmtMoney(d.montoPie)} en ${fmtNum(d.oppsConPie)} ops`;
 
     // Determine if this row is problematic (above the median for the active sort)
@@ -1868,6 +1891,7 @@ function renderRankingTable(tbodyId, entities, sortBy = 'montoPie', searchTerm =
         <td class="right mono" style="color: var(--text-soft);">${d.margen1Avg != null && d.oppsConPie > 0 ? fmtMoney(d.margen1Avg) : '—'}</td>
         <td class="right mono" style="color: var(--text-soft);">${d.margen1PctAvg != null && d.oppsConPie > 0 ? d.margen1PctAvg.toFixed(2).replace('.', ',') + '%' : '—'}</td>
         <td class="right mono" style="color: var(--text-soft);">${d.margen1PctAvgSin != null ? d.margen1PctAvgSin.toFixed(2).replace('.', ',') + '%' : '—'}</td>
+        <td class="right mono ${sortBy === 'marginGap' ? 'metric-active' : ''}" style="${Number.isFinite(d.marginGap) ? (d.marginGap >= 0 ? 'color: var(--red); font-weight: 600;' : 'color: var(--green);') : 'color: var(--text-soft);'}">${Number.isFinite(d.marginGap) ? (d.marginGap >= 0 ? '+' : '') + d.marginGap.toFixed(2).replace('.', ',') + ' pp' : '—'}</td>
       </tr>
     `;
   }).join('');
